@@ -1,0 +1,59 @@
+manifest_version: 2
+name: web-jina
+version: 0.1.0
+description: "Jina Reader extraction provider for Hermes web_extract."
+author: "Rad Paluszak (https://paluszak.me/) and NON.agency (https://non.agency/), with Hermes Agent implementation assistance"
+license: BSD-3-Clause
+kind: backend
+platforms:
+  - linux
+  - macos
+  - windows
+homepage: "https://paluszak.me/"
+provides_web_providers:
+  - jina
+optional_env:
+  - JINA_API_KEY
+  - JINA_SOCKS5_PROXY
+  - JINA_HTTP_PROXY
+config_schema:
+  timeout:
+    type: int
+    default: 20
+    description: "Jina request timeout in seconds."
+  browser_engine:
+    type: str
+    default: default
+    description: "Jina engine: default, auto, browser, or curl."
+  wait_for:
+    type: str
+    default: ""
+    description: "CSS selector that Jina must wait for before extraction."
+  user_agent_mode:
+    type: str
+    default: random
+    description: "User-agent mode: random, fixed, or off."
+  user_agents:
+    type: list
+    default: []
+    description: "Editable user-agent strings used by the provider."
+  target_selector:
+    type: str
+    default: ""
+    description: "CSS selector limiting the extracted target."
+  remove_selector:
+    type: str
+    default: ""
+    description: "CSS selector to remove before extraction."
+  with_generated_alt:
+    type: bool
+    default: false
+    description: "Ask Jina to generate alt text for images."
+  no_cache:
+    type: bool
+    default: false
+    description: "Ask Jina not to use its upstream cache."
+  cache_tolerance:
+    type: int
+    default: 0
+    description: "Optional Jina upstream cache tolerance in seconds."
