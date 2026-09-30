@@ -101,7 +101,7 @@ Alternatively:
 JINA_HTTP_PROXY=http://user:password@proxy.example:8080
 ```
 
-Set only one proxy variable. `JINA_SOCKS5_PROXY` takes precedence conceptually because it is the preferred option, but the plugin fails closed when both variables are set instead of silently choosing one.
+Set only one proxy variable. If both are set, the plugin fails closed with a configuration error; neither variable takes precedence.
 
 The proxy is sent to Jina as `X-Proxy-Url`. It is not used as a proxy for the Hermes-to-Jina connection.
 
@@ -119,6 +119,8 @@ The proxy is sent to Jina as `X-Proxy-Url`. It is not used as a proxy for the He
 | `with_generated_alt` | `false` | Ask Jina to generate image alt text. |
 | `no_cache` | `false` | Ask Jina not to use its upstream cache. |
 | `cache_tolerance` | `0` | Optional Jina upstream cache tolerance in seconds. |
+
+The configured `timeout` is sent to Jina as `X-Timeout`. The HTTP client waits five seconds longer so it does not cancel the request before Reader reaches that deadline. The standard `web_extract` `format` argument maps to Jina's `X-Respond-With` (`html` or `markdown`); `Accept: application/json` remains in place for the JSON response envelope.
 
 `browser_engine: default` intentionally sends no `X-Engine` header. The existing Hermes `web_extract` cache remains responsible for local cache behavior; this plugin does not replace or patch that cache.
 
@@ -142,7 +144,7 @@ With configured selectors:
 Use web_extract and focus on the article body configured for this profile.
 ```
 
-The options are profile configuration values. This plugin does not extend Hermes' core tool schema.
+Plugin-specific options are profile configuration values. The standard `web_extract` format argument is supported; this plugin does not extend Hermes' core tool schema.
 
 ## How it works
 

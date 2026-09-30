@@ -81,8 +81,74 @@ def test_extract_normalizes_jina_json(monkeypatch: pytest.MonkeyPatch) -> None:
     assert calls["url"] == "https://r.jina.ai/https://example.com"
     assert calls["headers"]["Accept"] == "application/json"
     assert "Authorization" not in calls["headers"]
-    assert calls["timeout"] == 20
+    assert calls["timeout"] == 25
     assert calls["follow_redirects"] is True
+
+
+@pytest.mark.parametrize(
+    ("requested_format", "expected_response_format"),
+    [("html", "html"), ("markdown", "markdown")],
+)
+def test_extract_maps_content_format_without_changing_json_transport(
+    monkeypatch: pytest.MonkeyPatch,
+    requested_format: str,
+    expected_response_format: str,
+) -> None:
+    calls: Dict[str, Any] = {}
+
+    def fake_get(url: str, **kwargs: Any) -> FakeResponse:
+        calls.update(url=url, **kwargs)
+        return FakeResponse({"data": {"content": "body"}})
+
+    monkeypatch.setattr("provider.httpx.get", fake_get)
+    monkeypatch.setattr("provider.get_provider_env", lambda name: "")
+
+    JinaWebSearchProvider().extract(
+        ["https://example.com"], format=requested_format
+    )
+
+    assert calls["headers"]["Accept"] == "application/json"
+    assert calls["headers"]["X-Respond-With"] == expected_response_format
+
+
+def test_extract_uses_html_payload_for_html_format(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: Dict[str, Any] = {}
+    html = "<html><body>Reader HTML</body></html>"
+
+    def fake_get(url: str, **kwargs: Any) -> FakeResponse:
+        calls.update(url=url, **kwargs)
+        return FakeResponse({"data": {"html": html}})
+
+    monkeypatch.setattr("provider.httpx.get", fake_get)
+    monkeypatch.setattr("provider.get_provider_env", lambda name: "")
+
+    result = JinaWebSearchProvider().extract(
+        ["https://example.com"], format="html"
+    )[0]
+
+    assert calls["headers"]["X-Respond-With"] == "html"
+    assert result["content"] == html
+    assert result["raw_content"] == html
+
+
+def test_extract_sends_reader_timeout_and_transport_grace(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: Dict[str, Any] = {}
+
+    def fake_get(url: str, **kwargs: Any) -> FakeResponse:
+        calls.update(url=url, **kwargs)
+        return FakeResponse({"data": {"content": "body"}})
+
+    monkeypatch.setattr("provider.httpx.get", fake_get)
+    monkeypatch.setattr("provider.get_provider_env", lambda name: "")
+
+    JinaWebSearchProvider({"timeout": 20}).extract(["https://example.com"])
+
+    assert calls["headers"]["X-Timeout"] == "20"
+    assert calls["timeout"] == 25
 
 
 def test_headers_cover_browser_wait_proxy_and_selectors(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -112,6 +178,7 @@ def test_headers_cover_browser_wait_proxy_and_selectors(monkeypatch: pytest.Monk
         "Accept": "application/json",
         "Authorization": "Bearer key-value",
         "X-Proxy-Url": "socks5://proxy.example:1080",
+        "X-Timeout": "20",
         "X-Engine": "browser",
         "X-Wait-For-Selector": ".article",
         "X-Target-Selector": "main",
@@ -162,13 +229,21 @@ def test_http_error_is_returned_per_url(monkeypatch: pytest.MonkeyPatch) -> None
     assert result[0]["error"] == "Jina Reader returned HTTP 429: rate limited"
 
 
-def test_provider_has_extract_only_capability() -> None:
+def test_provider_has_extract_only_capability(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("provider.get_provider_env", lambda name: "")
     provider = JinaWebSearchProvider()
     assert provider.name == "jina"
     assert provider.supports_extract() is True
     assert provider.supports_search() is False
-    assert provider.is_available() is True
+    assert provider.is_available() is False
     assert provider.is_keyless_available() is True
+
+
+def test_provider_is_available_when_api_key_is_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("provider.get_provider_env", lambda name: "configured-key")
+    assert JinaWebSearchProvider().is_available() is True
 
 
 def test_setup_schema_exposes_optional_environment_variables() -> None:

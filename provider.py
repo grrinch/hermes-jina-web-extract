@@ -26,6 +26,8 @@ _DEFAULT_USER_AGENTS = (
 )
 _ALLOWED_ENGINES = {"default", "auto", "browser", "curl", "direct"}
 _ALLOWED_UA_MODES = {"random", "fixed", "off"}
+_ALLOWED_RESPONSE_FORMATS = {"html", "markdown"}
+_HTTP_TIMEOUT_GRACE_SECONDS = 5
 
 
 @dataclass(frozen=True)
@@ -138,8 +140,8 @@ class JinaWebSearchProvider(WebSearchProvider):
         return "Jina Reader"
 
     def is_available(self) -> bool:
-        """Reader extraction is available without credentials."""
-        return True
+        """Return whether a configured key enables credentialed availability."""
+        return bool(get_provider_env("JINA_API_KEY"))
 
     def is_keyless_available(self) -> bool:
         return True
@@ -176,10 +178,22 @@ class JinaWebSearchProvider(WebSearchProvider):
 
     def extract(self, urls: List[str], **kwargs: Any) -> List[Dict[str, Any]]:
         """Extract every URL and return one normalized result per input URL."""
-        del kwargs  # The standalone plugin uses profile configuration for options.
-        return [self._extract_one(str(url)) for url in urls]
+        raw_format = kwargs.get("format")
+        response_format = (
+            raw_format.strip().lower()
+            if isinstance(raw_format, str)
+            else ""
+        )
+        if response_format not in _ALLOWED_RESPONSE_FORMATS:
+            response_format = ""
+        return [
+            self._extract_one(str(url), response_format=response_format)
+            for url in urls
+        ]
 
-    def _extract_one(self, source_url: str) -> Dict[str, Any]:
+    def _extract_one(
+        self, source_url: str, *, response_format: str = ""
+    ) -> Dict[str, Any]:
         result: Dict[str, Any] = {
             "url": source_url,
             "title": "",
@@ -194,8 +208,8 @@ class JinaWebSearchProvider(WebSearchProvider):
         try:
             response = httpx.get(
                 self._reader_url(source_url),
-                headers=self._headers(),
-                timeout=self.settings.timeout,
+                headers=self._headers(response_format=response_format),
+                timeout=self.settings.timeout + _HTTP_TIMEOUT_GRACE_SECONDS,
                 follow_redirects=True,
             )
             if response.status_code >= 400:
@@ -205,7 +219,13 @@ class JinaWebSearchProvider(WebSearchProvider):
             if not isinstance(data, dict):
                 raise ValueError("Jina response did not contain a data object")
 
-            content = str(data.get("content") or "")
+            content_key = "html" if response_format == "html" else "content"
+            content = str(
+                data.get(content_key)
+                or data.get("content")
+                or data.get("html")
+                or ""
+            )
             metadata = dict(data.get("metadata") or {}) if isinstance(data.get("metadata"), dict) else {}
             for key in ("publishedTime", "warning", "httpStatus", "httpStatusText"):
                 if key in data:
@@ -228,7 +248,7 @@ class JinaWebSearchProvider(WebSearchProvider):
     def _reader_url(source_url: str) -> str:
         return _READER_BASE_URL + quote(source_url, safe=":/?&=#%")
 
-    def _headers(self) -> Dict[str, str]:
+    def _headers(self, *, response_format: str = "") -> Dict[str, str]:
         headers: Dict[str, str] = {"Accept": "application/json"}
         api_key = get_provider_env("JINA_API_KEY")
         if api_key:
@@ -240,6 +260,10 @@ class JinaWebSearchProvider(WebSearchProvider):
             raise ValueError("Set only one of JINA_SOCKS5_PROXY or JINA_HTTP_PROXY")
         if socks_proxy or http_proxy:
             headers["X-Proxy-Url"] = socks_proxy or http_proxy
+
+        headers["X-Timeout"] = str(self.settings.timeout)
+        if response_format in _ALLOWED_RESPONSE_FORMATS:
+            headers["X-Respond-With"] = response_format
 
         engine = "curl" if self.settings.browser_engine == "direct" else self.settings.browser_engine
         if engine != "default":
