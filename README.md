@@ -105,6 +105,8 @@ Set only one proxy variable. If both are set, the plugin fails closed with a con
 
 The proxy is sent to Jina as `X-Proxy-Url`. It is not used as a proxy for the Hermes-to-Jina connection.
 
+**Security:** The proxy URL can contain a username and password. The plugin sends this value to Jina in the `X-Proxy-Url` HTTP header. The header value is plain text at the HTTP layer, but the request to Jina uses HTTPS, so TLS encrypts it in transit. Jina terminates that connection and can read the header. We strongly recommend creating a dedicated account and credentials with your proxy provider for Jina. Do not reuse personal or shared proxy credentials; use the least privilege available and rotate credentials if they are exposed.
+
 ## Configuration
 
 | Setting | Default | Purpose |
